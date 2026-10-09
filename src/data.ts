@@ -196,7 +196,7 @@ export function seedState() {
     trip({ id: 't6', userId: 'sk', date: d(-3), client: 'SGCI', place: 'Plateau', transport: 'VTC', aller: 3500, payMode: 'Mobile Money', status: 'Validé', retained: 3500 }),
   ]
   const anns: Announcement[] = [
-    { id: 'a1', type: 'Naissance', title: 'Bienvenue au petit Ethan !', msg: 'Ibrahim et sa famille accueillent leur fils. Toutes nos félicitations.', date: at(-1, 10, 0), dest: ["Toute l'agence"] },
+    { id: 'a1', type: 'Naissance', title: 'Bienvenue au petit Ethan !', msg: 'Fernande et sa famille accueillent leur fils. Toutes nos félicitations.', date: at(-1, 10, 0), dest: ["Toute l'agence"] },
     { id: 'a2', type: 'Anniversaire', title: 'Joyeux anniversaire Grâce', msg: 'Gâteau à 16 h en salle de réunion.', date: at(-3, 9, 0), dest: ["Toute l'agence"] },
     { id: 'a3', type: 'Information', title: 'Fermeture le 15 novembre', msg: "L'agence sera fermée pour la Journée nationale de la paix.", date: at(-4, 9, 0), dest: ["Toute l'agence"] },
   ]

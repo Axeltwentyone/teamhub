@@ -2,8 +2,9 @@
 
 const NBSP = / | /g
 
-export const fcfa = (n: number) => Math.round(n).toLocaleString('fr-FR').replace(NBSP, ' ') + ' F CFA'
-export const fcfaShort = (n: number) => fcfa(n).replace(' CFA', '')
+// Espaces insécables : un montant ne se coupe jamais en fin de ligne.
+export const fcfa = (n: number) => Math.round(n).toLocaleString('fr-FR').replace(NBSP, '\u00a0') + '\u00a0F\u00a0CFA'
+export const fcfaShort = (n: number) => fcfa(n).replace('\u00a0CFA', '')
 
 export const parseAmount = (s: string) => parseInt(s.replace(/\D/g, ''), 10) || 0
 
