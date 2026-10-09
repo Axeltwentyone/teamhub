@@ -24,7 +24,7 @@ const PARENT: [RegExp, string][] = [
   [/^\/admin\/conges\//, '/admin/demandes'],
   [/^\/admin\/deplacements\//, '/admin/demandes/deplacements'],
 ]
-const parentOf = (path: string) => PARENT.find(([r]) => r.test(path))?.[1] ?? '/'
+export const parentOf = (path: string) => PARENT.find(([r]) => r.test(path))?.[1] ?? '/'
 
 const EASE = [0.32, 0.72, 0, 1] as const
 const DURATION = 0.42
@@ -95,6 +95,17 @@ export function StackNavigator({ render, tabBar }: { render: (loc: Location) => 
     haptic('light')
     setStack([...prev, makeEntry(location, kind, true)])
   }, [location])
+
+  // Clavier (ordinateur) : Échap ferme la modale ou revient en arrière.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || kindOf(location.pathname) === 'root') return
+      if (document.querySelector('.sheet-backdrop')) return // une feuille ouverte se ferme d'abord
+      back()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [location.pathname, back])
 
   const remove = useCallback((id: number) => setStack(s => s.filter(e => e.id !== id)), [])
   const width = () => box.current?.offsetWidth ?? window.innerWidth

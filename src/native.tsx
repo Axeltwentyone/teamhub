@@ -13,6 +13,19 @@ export const isStandalone = () =>
 // iPadOS se présente comme un Mac : on le reconnaît à l'écran tactile.
 export const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
 
+/** Suit une media query (ex. passage tablette / ordinateur). */
+export function useMedia(query: string) {
+  const [on, setOn] = useState(() => window.matchMedia(query).matches)
+  useEffect(() => {
+    const m = window.matchMedia(query)
+    const f = () => setOn(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [query])
+  return on
+}
+export const WIDE = '(min-width: 768px)'
+
 /** Couleur de la barre d'état (Android, et iOS en mode installé). */
 export function useStatusBar(color: string) {
   useEffect(() => {

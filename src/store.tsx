@@ -4,6 +4,7 @@ import {
   FIXED_CHARGE, LATE_AFTER, PEOPLE, person, seedHistory, seedPresence, seedState,
 } from './data'
 import { dayMonth, fcfa, isoDay } from './format'
+import type { Office } from './geo'
 
 const KEY = 'teamhub:v1'
 
@@ -18,6 +19,8 @@ export interface State {
   moves: Move[]
   fixedPaidMonth: string | null
   notifsSeenAt: Record<string, string>
+  /** Emplacement de l'agence : le pointage n'est accepté que dans ce rayon. */
+  office: Office | null
 }
 
 const uid = () => Math.random().toString(36).slice(2, 10)
@@ -32,6 +35,7 @@ function fresh(): State {
     ...seedState(),
     fixedPaidMonth: null,
     notifsSeenAt: {},
+    office: null,
   }
 }
 
@@ -140,7 +144,10 @@ function useStoreValue() {
   const actions = useMemo(() => ({
     login: (id: string) => setState(s => ({ ...s, userId: id })),
     logout: () => setState(s => ({ ...s, userId: null })),
-    reset: () => setState(s => ({ ...fresh(), userId: s.userId })),
+    // Le réglage de l'emplacement n'est pas une donnée de démo : on le garde.
+    reset: () => setState(s => ({ ...fresh(), userId: s.userId, office: s.office })),
+    setOffice: (office: Office | null) => setState(s => ({ ...s, office })),
+    setRadius: (radius: number) => setState(s => (s.office ? { ...s, office: { ...s.office, radius } } : s)),
 
     scan: () => setState(s => {
       if (!s.userId) return s

@@ -7,6 +7,7 @@ import { monthMoves, presenceOf, tripTotal, useStore } from '../store'
 import { qrPng, qrPoster, saveFile, type SaveResult } from '../files'
 import { useFeedback } from '../native'
 import { Icon, PageHeader, Screen, SectionTitle } from '../ui'
+import OfficeLocation from './OfficeLocation'
 
 function downloadCsv(name: string, rows: (string | number)[][]) {
   const esc = (v: string | number) => { const s = String(v); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
@@ -78,6 +79,8 @@ export default function Exports() {
           </button>
         ))}
       </div>
+
+      <OfficeLocation />
 
       <SectionTitle>QR code de pointage</SectionTitle>
       <div className="card" style={{ alignItems: 'center', gap: 12, padding: 20 }}>

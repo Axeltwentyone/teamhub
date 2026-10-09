@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import jsQR from 'jsqr'
 import { LATE_AFTER, QR_PAYLOAD } from '../data'
 import { hm } from '../format'
+import { errorReason, evaluate, GEO_MESSAGES, getPosition, type GeoCheck, type Office } from '../geo'
 import { haptic, useStatusBar } from '../native'
 import { usePage } from '../stack'
 import { isLate, presenceOf, useStore } from '../store'
@@ -63,27 +64,59 @@ function useQrCamera(active: boolean, onCode: (data: string) => void) {
   return { video, cam, torch, toggleTorch }
 }
 
-// C2 · Pointage par QR code
+type Phase = 'scan' | 'checking' | 'blocked' | 'done'
+
+/**
+ * Suit la position dès l'ouverture du scan, pour que la vérification soit quasi instantanée
+ * au moment où le QR est lu. Sans emplacement d'agence configuré, aucune restriction.
+ */
+function useOfficeCheck(office: Office | null, active: boolean) {
+  const latest = useRef<GeolocationPosition | null>(null)
+  useEffect(() => {
+    if (!office || !active || !navigator.geolocation) return
+    const id = navigator.geolocation.watchPosition(p => { latest.current = p }, () => {}, { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 })
+    return () => navigator.geolocation.clearWatch(id)
+  }, [office, active])
+
+  return useCallback(async (): Promise<GeoCheck> => {
+    if (!office) return { ok: true }
+    if (!navigator.geolocation) return { ok: false, reason: 'unsupported' }
+    const p = latest.current
+    if (p && Date.now() - p.timestamp < 30000) {
+      const r = evaluate(p, office)
+      if (r.ok) return r
+    }
+    try { return evaluate(await getPosition(), office) } catch (e) { return { ok: false, reason: errorReason(e as GeolocationPositionError) } }
+  }, [office])
+}
+
+// C2 · Pointage par QR code, accepté uniquement au bureau (GPS)
 export default function Scan() {
   const { state, me, scan } = useStore()
   const { back } = usePage()
   useStatusBar('#10151F')
-  const [done, setDone] = useState(false)
+  const [phase, setPhase] = useState<Phase>('scan')
   const [wrong, setWrong] = useState(false)
+  const [fail, setFail] = useState<GeoCheck | null>(null)
+  const office = state.office
+  const checkOffice = useOfficeCheck(office, phase !== 'done')
 
-  const register = useCallback(() => {
+  const register = useCallback(async () => {
+    setPhase('checking')
+    const r = await checkOffice()
+    if (!r.ok) { haptic('error'); setFail(r); setPhase('blocked'); return }
     scan()
     haptic('success')
-    setDone(true)
-  }, [scan])
+    setPhase('done')
+  }, [scan, checkOffice])
 
   const onCode = useCallback((data: string) => {
-    if (done) return
+    if (phase !== 'scan') return
     if (data.trim().toUpperCase() === QR_PAYLOAD) register()
     else { if (!wrong) haptic('warning'); setWrong(true) }
-  }, [done, register, wrong])
+  }, [phase, register, wrong])
 
-  const { video, cam, torch, toggleTorch } = useQrCamera(!done, onCode)
+  const { video, cam, torch, toggleTorch } = useQrCamera(phase === 'scan' || phase === 'checking', onCode)
 
   const pr = presenceOf(state, me!.id)
   const times = pr.times, n = times.length
@@ -91,6 +124,7 @@ export default function Scan() {
   const late = n === 1 && isLate(times[0])
   const msg = n === 0 ? '' : n === 1 ? 'Arrivée enregistrée à ' + hm(times[0]) : left ? 'Départ enregistré à ' + hm(times[n - 1]) : 'Retour enregistré à ' + hm(times[n - 1])
   const rows = times.map((t, i) => ({ t, label: i === 0 ? 'Arrivée' : left && i === n - 1 ? 'Départ' : 'Scan intermédiaire' }))
+  const failMsg = fail && !fail.ok && office ? GEO_MESSAGES[fail.reason] : null
 
   return (
     <Screen dark cta>
@@ -103,7 +137,7 @@ export default function Scan() {
         </button>
       </div>
 
-      {!done ? (
+      {(phase === 'scan' || phase === 'checking') && (
         <div className="col" style={{ alignItems: 'center', gap: 28, paddingTop: 40 }}>
           <div className="viewfinder">
             <video ref={video} playsInline muted style={{ opacity: cam === 'live' ? 1 : 0 }} />
@@ -113,16 +147,32 @@ export default function Scan() {
               </span>
             )}
             <div className="corner tl" /><div className="corner tr" /><div className="corner bl" /><div className="corner br" />
-            <div className="laser" />
+            {phase === 'checking'
+              ? <div className="locating"><span className="spinner" />Vérification de votre position…</div>
+              : <div className="laser" />}
           </div>
           <div className="col" style={{ alignItems: 'center', gap: 8, textAlign: 'center' }}>
             <span style={{ fontSize: 20, fontWeight: 800 }}>{wrong ? 'QR code non reconnu' : 'Visez le QR code TeamHub'}</span>
             <span style={{ fontSize: 15, color: 'var(--soft)', lineHeight: 1.45, maxWidth: 290, textWrap: 'pretty' }}>
               {wrong ? "Ce n'est pas le code de l'agence. Visez celui affiché à l'entrée." : "Affiché à l'entrée de l'agence. Premier scan = arrivée, dernier scan = départ."}
             </span>
+            {office && <span className="geo-chip"><Icon name="pin" size={14} />Pointage possible uniquement au bureau</span>}
           </div>
         </div>
-      ) : (
+      )}
+
+      {phase === 'blocked' && failMsg && fail && office && (
+        <div className="col" style={{ alignItems: 'center', gap: 16, paddingTop: 48, textAlign: 'center' }}>
+          <div className="pop" style={{ width: 100, height: 100, borderRadius: 50, background: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Icon name="pin" size={46} stroke={2.4} />
+          </div>
+          <span style={{ fontSize: 24, fontWeight: 800 }}>{failMsg.title}</span>
+          <span style={{ fontSize: 15, color: 'var(--soft)', lineHeight: 1.5, maxWidth: 320, textWrap: 'pretty' }}>{failMsg.body(fail, office)}</span>
+          <span style={{ fontSize: 13, color: '#8D9AB5' }}>Aucun pointage n'a été enregistré.</span>
+        </div>
+      )}
+
+      {phase === 'done' && (
         <>
           <div className="col" style={{ alignItems: 'center', gap: 18, paddingTop: 36, textAlign: 'center' }}>
             <div className="pop" style={{ width: 100, height: 100, borderRadius: 50, background: late ? '#E07B39' : 'var(--teal)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -144,9 +194,16 @@ export default function Scan() {
       )}
 
       <CTA>
-        {done
-          ? <button className="btn white" onClick={back}>Terminé</button>
-          : <button className="btn" onClick={register} title="Pointage sans caméra (démo)">{cam === 'live' ? 'Pointer sans scanner (démo)' : 'Simuler le scan'}</button>}
+        {phase === 'done' && <button className="btn white" onClick={back}>Terminé</button>}
+        {phase === 'blocked' && <>
+          <button className="btn ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', borderColor: 'transparent' }} onClick={back}>Fermer</button>
+          <button className="btn" onClick={register}>Réessayer</button>
+        </>}
+        {(phase === 'scan' || phase === 'checking') && (
+          <button className="btn" onClick={register} disabled={phase === 'checking'} title="Pointage sans caméra (démo)">
+            {phase === 'checking' ? 'Vérification…' : cam === 'live' ? 'Pointer sans scanner (démo)' : 'Simuler le scan'}
+          </button>
+        )}
       </CTA>
     </Screen>
   )

@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import type { Role } from './data'
 import { haptic } from './native'
-import { usePage } from './stack'
+import { kindOf, parentOf, usePage } from './stack'
 import { useStore, unreadCount } from './store'
 
 // ——— Icônes (tracés repris de la maquette) ———
@@ -32,6 +32,7 @@ const ICONS: Record<string, ReactNode> = {
   download: <><path d="M12 3v12M7 10l5 5 5-5" /><path d="M5 21h14" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   bolt: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
+  pin: <><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>,
   logout: <><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="M16 17l5-5-5-5M21 12H9" /></>,
 }
 
@@ -73,7 +74,7 @@ const TitleCtx = createContext<(t: string) => void>(() => {})
  * Un écran = son propre conteneur de défilement (comme une vue native).
  * Au scroll, une barre de titre compacte floutée apparaît en haut.
  */
-export function Screen({ children, dark, cta }: { children: ReactNode; dark?: boolean; cta?: boolean }) {
+export function Screen({ children, dark, cta, narrow }: { children: ReactNode; dark?: boolean; cta?: boolean; narrow?: boolean }) {
   const { active, kind } = usePage()
   const ref = useRef<HTMLElement>(null)
   const [scrolled, setScrolled] = useState(false)
@@ -91,7 +92,7 @@ export function Screen({ children, dark, cta }: { children: ReactNode; dark?: bo
     <TitleCtx.Provider value={setTitle}>
       <div className={'screen-wrap' + (dark ? ' dark' : '') + (scrolled ? ' scrolled' : '')}>
         {title && <div className="navbar" aria-hidden={!scrolled}><span>{title}</span></div>}
-        <main ref={ref} className={'screen' + (cta ? ' has-cta' : '') + (kind === 'root' ? ' with-tabs' : '')}
+        <main ref={ref} className={'screen' + (cta ? ' has-cta' : '') + (kind === 'root' ? ' with-tabs' : '') + (narrow ? ' narrow' : '')}
           onScroll={e => setScrolled(e.currentTarget.scrollTop > 40)}>
           {children}
         </main>
@@ -254,5 +255,46 @@ export function TabBar({ role, pathname }: { role: Role; pathname: string }) {
         )
       })}
     </nav>
+  )
+}
+
+/** Barre latérale (tablette / ordinateur) : remplace la barre d'onglets du bas. */
+export function Sidebar() {
+  const { me, state } = useStore()
+  const nav = useNavigate()
+  const { pathname } = useLocation()
+  const lastRoot = useRef<string | null>(null)
+  if (kindOf(pathname) === 'root') lastRoot.current = pathname
+  if (!me) return null
+  const tabs = TABS[me.role]
+  // Sous un écran de détail ou une modale, on garde en surbrillance l'onglet d'où l'on vient.
+  const base = kindOf(pathname) === 'root' ? pathname : lastRoot.current ?? parentOf(pathname)
+  const activeTab = tabs.filter(t => isTabActive(t, base)).sort((a, b) => b.to.length - a.to.length)[0]
+  const unread = unreadCount(state, me.id)
+  const accountTo = me.role === 'admin' ? '/admin/exports' : '/profil'
+  return (
+    <aside className="sidebar" aria-label="Navigation principale">
+      <div className="sb-brand">
+        <span className="sb-logo">TH</span>
+        <div className="col sb-label"><b>TeamHub</b><span>YesWeCange</span></div>
+      </div>
+      <nav className="sb-nav">
+        {tabs.map(t => {
+          const on = t === activeTab
+          const badge = t.icon === 'megaphone' && unread > 0
+          return (
+            <button key={t.to} className={'sb-item' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined} title={t.label}
+              onClick={() => (on && kindOf(pathname) === 'root' ? window.dispatchEvent(new Event('th:tab-reselect')) : nav(t.to, { replace: kindOf(pathname) === 'root' }))}>
+              <span className="sb-ic"><Icon name={t.icon} stroke={on ? 2.2 : 2} />{badge && <i className="sb-dot" />}</span>
+              <span className="sb-label">{t.label === 'Déplac.' ? 'Déplacements' : t.label}</span>
+            </button>
+          )
+        })}
+      </nav>
+      <button className="sb-me" onClick={() => nav(accountTo)} title={me.name}>
+        <Avatar ini={me.ini} color={me.color} size={38} />
+        <div className="col sb-label" style={{ minWidth: 0 }}><b className="ellipsis">{me.name}</b><span className="ellipsis">{me.poste}</span></div>
+      </button>
+    </aside>
   )
 }

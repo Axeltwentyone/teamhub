@@ -23,7 +23,7 @@ export default function Login() {
   const enter = (pid: string) => { login(pid); nav(person(pid).role === 'admin' ? '/admin/presences' : '/', { replace: true }) }
 
   return (
-    <Screen cta>
+    <Screen cta narrow>
       <form id="login" onSubmit={submit} className="col" style={{ gap: 18 }}>
         <div className="col" style={{ gap: 10, paddingTop: 56 }}>
           <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--navy)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>TH</div>

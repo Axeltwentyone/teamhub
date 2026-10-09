@@ -1,9 +1,9 @@
 import { Navigate, Route, Routes, type Location } from 'react-router-dom'
 import type { Person } from './data'
-import { InstallPrompt } from './native'
+import { InstallPrompt, useMedia, WIDE } from './native'
 import { StackNavigator } from './stack'
 import { useStore } from './store'
-import { TabBar } from './ui'
+import { Sidebar, TabBar } from './ui'
 import Login from './screens/Login'
 import Home from './screens/Home'
 import Scan from './screens/Scan'
@@ -53,14 +53,22 @@ function AppRoutes({ me, location }: { me: Person; location: Location }) {
 
 export default function App() {
   const { me } = useStore()
+  const wide = useMedia(WIDE)
   return (
-    <>
-      {me
-        ? <StackNavigator key={me.id}
+    <div className={'app' + (wide ? ' wide' : '')}>
+      {me ? <>
+        {wide && <Sidebar />}
+        <div className="app-main">
+          <StackNavigator key={me.id}
             render={loc => <AppRoutes me={me} location={loc} />}
-            tabBar={pathname => <TabBar role={me.role} pathname={pathname} />} />
-        : <Routes><Route path="*" element={<div className="stack"><div className="stack-page"><Login /></div></div>} /></Routes>}
+            tabBar={pathname => (wide ? null : <TabBar role={me.role} pathname={pathname} />)} />
+        </div>
+      </> : (
+        <div className="app-main">
+          <Routes><Route path="*" element={<div className="stack"><div className="stack-page"><Login /></div></div>} /></Routes>
+        </div>
+      )}
       <InstallPrompt />
-    </>
+    </div>
   )
 }
