@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import jsQR from 'jsqr'
 import { LATE_AFTER, QR_PAYLOAD } from '../data'
 import { hm } from '../format'
+import { haptic, useStatusBar } from '../native'
+import { usePage } from '../stack'
 import { isLate, presenceOf, useStore } from '../store'
 import { CTA, Icon, Screen } from '../ui'
 
@@ -65,21 +66,22 @@ function useQrCamera(active: boolean, onCode: (data: string) => void) {
 // C2 · Pointage par QR code
 export default function Scan() {
   const { state, me, scan } = useStore()
-  const nav = useNavigate()
+  const { back } = usePage()
+  useStatusBar('#10151F')
   const [done, setDone] = useState(false)
   const [wrong, setWrong] = useState(false)
 
   const register = useCallback(() => {
-    if (navigator.vibrate) navigator.vibrate(60)
     scan()
+    haptic('success')
     setDone(true)
   }, [scan])
 
   const onCode = useCallback((data: string) => {
     if (done) return
     if (data.trim().toUpperCase() === QR_PAYLOAD) register()
-    else setWrong(true)
-  }, [done, register])
+    else { if (!wrong) haptic('warning'); setWrong(true) }
+  }, [done, register, wrong])
 
   const { video, cam, torch, toggleTorch } = useQrCamera(!done, onCode)
 
@@ -93,7 +95,7 @@ export default function Scan() {
   return (
     <Screen dark cta>
       <div className="row-between">
-        <button className="round-btn" aria-label="Fermer" onClick={() => nav('/')}><Icon name="close" size={16} stroke={2.6} /></button>
+        <button className="round-btn" aria-label="Fermer" onClick={back}><Icon name="close" size={16} stroke={2.6} /></button>
         <span style={{ fontSize: 17, fontWeight: 800 }}>Pointage</span>
         <button className="round-btn" aria-label="Lampe torche" aria-pressed={!!torch} disabled={torch === null}
           onClick={toggleTorch} style={{ opacity: torch === null ? .4 : 1, background: torch ? 'var(--teal)' : undefined }}>
@@ -143,7 +145,7 @@ export default function Scan() {
 
       <CTA>
         {done
-          ? <button className="btn white" onClick={() => nav('/')}>Terminé</button>
+          ? <button className="btn white" onClick={back}>Terminé</button>
           : <button className="btn" onClick={register} title="Pointage sans caméra (démo)">{cam === 'live' ? 'Pointer sans scanner (démo)' : 'Simuler le scan'}</button>}
       </CTA>
     </Screen>

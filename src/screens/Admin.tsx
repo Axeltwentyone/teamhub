@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { type PayMode, PEOPLE, person, TEAM_CAP } from '../data'
 import { dayMonth, dayShort, fcfa, hm, isoDay, parseAmount, range, relDay, workDays } from '../format'
 import { overlappingLeaves, type PresenceStatus, presenceOf, tripTotal, useStore } from '../store'
 import { Avatar, BackHeader, BellButton, Chips, CTA, Empty, Field, Icon, PageHeader, Pill, pillColors, Screen, Segmented } from '../ui'
 import { refundNote } from './Trips'
+import { haptic, useFeedback } from '../native'
+import { usePage } from '../stack'
 
 const COUNTERS: PresenceStatus[] = ['Au bureau', 'En retard', 'Pas encore arrivé', 'En congé', 'En déplacement', 'Parti']
 const SHORT: Partial<Record<PresenceStatus, string>> = { 'Pas encore arrivé': 'Pas arrivés', 'En déplacement': 'En déplac.', 'Parti': 'Partis' }
@@ -123,21 +125,27 @@ const Tile = ({ k, v }: { k: string; v: string }) => (
 export function LeaveReview() {
   const { id } = useParams()
   const { state, decideLeave } = useStore()
+  const { back } = usePage()
+  const { toast } = useFeedback()
   const l = state.leaves.find(x => x.id === id)
   const [comment, setComment] = useState('')
   const [error, setError] = useState(false)
-  if (!l) return <Screen><BackHeader title="Demande de congé" to="/admin/demandes" /><Empty>Demande introuvable.</Empty></Screen>
+  if (!l) return <Screen><BackHeader title="Demande de congé" /><Empty>Demande introuvable.</Empty></Screen>
 
   const p = person(l.userId)
   const pending = l.status === 'En attente'
   const conflicts = overlappingLeaves(state, l)
   const [bg, fg] = pillColors(l.status)
 
-  const refuse = () => comment.trim() ? decideLeave(l.id, 'Refusé', comment.trim()) : setError(true)
+  const refuse = () => {
+    if (!comment.trim()) { haptic('error'); return setError(true) }
+    decideLeave(l.id, 'Refusé', comment.trim()); toast(`Congé refusé · ${p.first} est notifié${p.fem ? 'e' : ''}`, 'info'); back()
+  }
+  const approve = () => { decideLeave(l.id, 'Approuvé', comment.trim() || undefined); toast(`Congé approuvé · ${p.first} est notifié${p.fem ? 'e' : ''}`); back() }
 
   return (
     <Screen cta={pending}>
-      <BackHeader title="Demande de congé" to="/admin/demandes" />
+      <BackHeader title="Demande de congé" />
       <div className="card" style={{ padding: 16, gap: 14, borderRadius: 20 }}>
         <div className="row">
           <Avatar ini={p.ini} color={p.color} size={44} />
@@ -178,7 +186,7 @@ export function LeaveReview() {
       {pending && (
         <CTA>
           <button className="btn ghost" onClick={refuse}>Refuser</button>
-          <button className="btn" style={{ fontSize: 16 }} onClick={() => decideLeave(l.id, 'Approuvé', comment.trim() || undefined)}>Approuver</button>
+          <button className="btn" style={{ fontSize: 16 }} onClick={approve}>Approuver</button>
         </CTA>
       )}
     </Screen>
@@ -190,7 +198,8 @@ const PAY_MODES: PayMode[] = ['Espèces', 'Mobile Money']
 // A3 · Traiter un déplacement : Envoyé → Validé → Remboursé (sortie de caisse automatique)
 export function TripReview() {
   const { id } = useParams()
-  const nav = useNavigate()
+  const { back } = usePage()
+  const { toast } = useFeedback()
   const { state, validateTrip, refuseTrip, refundTrip } = useStore()
   const t = state.trips.find(x => x.id === id)
   const [retained, setRetained] = useState(() => String(t ? t.retained ?? tripTotal(t) : ''))
@@ -199,7 +208,7 @@ export function TripReview() {
   const [refusing, setRefusing] = useState(false)
   const [reason, setReason] = useState('')
   const [refErr, setRefErr] = useState(false)
-  if (!t) return <Screen><BackHeader title="Déplacement" to="/admin/demandes/deplacements" /><Empty>Déplacement introuvable.</Empty></Screen>
+  if (!t) return <Screen><BackHeader title="Déplacement" /><Empty>Déplacement introuvable.</Empty></Screen>
 
   const p = person(t.userId)
   const cap = TEAM_CAP[p.team] ?? 5000
@@ -209,13 +218,15 @@ export function TripReview() {
     ['Montant déclaré', fcfa(tripTotal(t))], ['Souhaité', t.payMode],
   ]
   const refund = () => {
-    if (pay === 'Mobile Money' && !txRef.trim()) return setRefErr(true)
+    if (pay === 'Mobile Money' && !txRef.trim()) { haptic('error'); return setRefErr(true) }
     refundTrip(t.id, pay, txRef.trim())
+    toast('Remboursé · sortie ajoutée à la caisse')
+    back()
   }
 
   return (
     <Screen cta={t.status === 'Envoyé' || t.status === 'Validé'}>
-      <BackHeader title="Déplacement" to="/admin/demandes/deplacements" right={<Pill label={t.status} />} />
+      <BackHeader title="Déplacement" right={<Pill label={t.status} />} />
       <div className="card" style={{ borderRadius: 20, gap: 0 }}>
         <div className="row" style={{ paddingBottom: 6 }}>
           <Avatar ini={p.ini} color={p.color} size={40} />
@@ -271,17 +282,14 @@ export function TripReview() {
         <CTA>
           {refusing ? <>
             <button className="btn ghost" onClick={() => setRefusing(false)}>Retour</button>
-            <button className="btn" style={{ background: 'var(--danger)', fontSize: 16 }} onClick={() => refuseTrip(t.id, reason.trim())}>Confirmer le refus</button>
+            <button className="btn" style={{ background: 'var(--danger)', fontSize: 16 }} onClick={() => { refuseTrip(t.id, reason.trim()); toast('Déplacement refusé', 'info'); back() }}>Confirmer le refus</button>
           </> : <>
             <button className="btn ghost" onClick={() => setRefusing(true)}>Refuser</button>
-            <button className="btn" style={{ fontSize: 16 }} disabled={!parseAmount(retained)} onClick={() => validateTrip(t.id, parseAmount(retained))}>Valider</button>
+            <button className="btn" style={{ fontSize: 16 }} disabled={!parseAmount(retained)} onClick={() => { validateTrip(t.id, parseAmount(retained)); toast('Déplacement validé') }}>Valider</button>
           </>}
         </CTA>
       )}
       {t.status === 'Validé' && <CTA><button className="btn navy" style={{ fontSize: 16 }} onClick={refund}>Marquer comme remboursé</button></CTA>}
-      {(t.status === 'Remboursé' || t.status === 'Refusé') && (
-        <button className="btn ghost" onClick={() => nav('/admin/demandes/deplacements')}>Retour aux déplacements</button>
-      )}
     </Screen>
   )
 }

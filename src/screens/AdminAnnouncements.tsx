@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { ANN_TYPES, TEAMS } from '../data'
+import { haptic, useFeedback } from '../native'
+import { usePage } from '../stack'
 import { useStore } from '../store'
-import { BackHeader, Chips, CTA, Empty, Field, Icon, PageHeader, Screen } from '../ui'
+import { AddButton, BackHeader, Chips, CTA, Empty, Field, PageHeader, Screen } from '../ui'
 import { AnnCard } from './Announcements'
 
 // Annonces publiées (admin)
@@ -12,7 +13,7 @@ export function AdminAnnouncements() {
   return (
     <Screen>
       <PageHeader sub="Vie de l'équipe" title="Annonces"
-        right={<Link to="/admin/annonces/nouvelle" className="bell" aria-label="Nouvelle annonce" style={{ background: 'var(--teal)', color: '#fff' }}><Icon name="plus" /></Link>} />
+        right={<AddButton to="/admin/annonces/nouvelle" label="Nouvelle annonce" />} />
       {anns.length ? anns.map(a => (
         <div key={a.id} className="col" style={{ gap: 6 }}>
           <AnnCard a={a} />
@@ -29,7 +30,8 @@ const DESTS = [ALL, ...TEAMS] as const
 // A5 · Publier une annonce
 export function NewAnnouncement() {
   const { publishAnn } = useStore()
-  const nav = useNavigate()
+  const { back } = usePage()
+  const { toast } = useFeedback()
   const [type, setType] = useState<typeof ANN_TYPES[number]>('Information')
   const [title, setTitle] = useState('')
   const [msg, setMsg] = useState('')
@@ -42,10 +44,12 @@ export function NewAnnouncement() {
 
   const send = () => {
     setTried(true)
-    if (!title.trim() || !msg.trim() || sent) return
+    if (!title.trim() || !msg.trim()) return haptic('error')
+    if (sent) return
     publishAnn({ type, title: title.trim(), msg: msg.trim(), dest })
     setSent(true)
-    setTimeout(() => nav('/admin/annonces', { replace: true }), 700)
+    toast('Annonce publiée')
+    back()
   }
 
   return (
@@ -60,7 +64,7 @@ export function NewAnnouncement() {
       </Field>
       <Field label="Destinataires"><Chips options={DESTS} value={dest as typeof DESTS[number][]} onPick={pickDest} wrap /></Field>
       {tried && (!title.trim() || !msg.trim()) && <span className="err">Ajoutez un titre et un message.</span>}
-      <CTA><button className={'btn' + (sent ? ' navy' : '')} onClick={send}>{sent ? 'Annonce publiée ✓' : "Publier l'annonce"}</button></CTA>
+      <CTA><button className="btn" onClick={send}>Publier l'annonce</button></CTA>
     </Screen>
   )
 }

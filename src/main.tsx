@@ -8,6 +8,7 @@ import '@fontsource/manrope/latin-600.css'
 import '@fontsource/manrope/latin-700.css'
 import '@fontsource/manrope/latin-800.css'
 import './styles.css'
+import { FeedbackProvider } from './native'
 import { StoreProvider } from './store'
 import App from './App'
 
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <StoreProvider>
-        <App />
+        <FeedbackProvider>
+          <App />
+        </FeedbackProvider>
       </StoreProvider>
     </BrowserRouter>
   </StrictMode>,

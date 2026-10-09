@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { CASH_CATS, CAT_COLORS, FIXED_CHARGE } from '../data'
 import { dayMonth, fcfa, fcfaShort, isoDay, monthYear, parseAmount, relDay } from '../format'
 import { isFixedPaid, monthMoves, useStore } from '../store'
+import { Sheet, useFeedback } from '../native'
 import { Chips, Empty, Field, Icon, PageHeader, Screen, SectionTitle } from '../ui'
 
 const MODES = ['Espèces', 'Mobile Money', 'Virement'] as const
 
-function MoveSheet({ kind, onClose }: { kind: 'in' | 'out'; onClose: () => void }) {
+function MoveForm({ kind, onClose }: { kind: 'in' | 'out'; onClose: () => void }) {
   const { addMove } = useStore()
+  const { toast } = useFeedback()
   const [label, setLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [cat, setCat] = useState<typeof CASH_CATS[number]>('Fournitures')
@@ -19,16 +21,15 @@ function MoveSheet({ kind, onClose }: { kind: 'in' | 'out'; onClose: () => void 
     setTried(true)
     if (!label.trim() || !n) return
     addMove({ label: label.trim(), amount: kind === 'in' ? n : -n, mode, cat: kind === 'out' ? cat : undefined })
+    toast(kind === 'in' ? 'Entrée enregistrée' : 'Sortie enregistrée')
     onClose()
   }
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-label={kind === 'in' ? 'Nouvelle entrée' : 'Nouvelle sortie'} onClick={e => e.stopPropagation()}>
-        <div className="sheet-grip" />
+    <>
         <span style={{ fontSize: 20, fontWeight: 800 }}>{kind === 'in' ? 'Nouvelle entrée' : 'Nouvelle sortie'}</span>
         <Field label="Libellé">
-          <input className={'input' + (tried && !label.trim() ? ' error' : '')} autoFocus value={label} onChange={e => setLabel(e.target.value)} placeholder={kind === 'in' ? 'Approvisionnement direction' : 'Fournitures de bureau'} />
+          <input className={'input' + (tried && !label.trim() ? ' error' : '')} value={label} onChange={e => setLabel(e.target.value)} placeholder={kind === 'in' ? 'Approvisionnement direction' : 'Fournitures de bureau'} />
         </Field>
         <Field label="Montant (F CFA)">
           <input className={'input' + (tried && !n ? ' error' : '')} inputMode="numeric" style={{ fontSize: 18, fontWeight: 800 }} value={amount} onChange={e => setAmount(e.target.value.replace(/\D/g, ''))} placeholder="0" />
@@ -39,15 +40,17 @@ function MoveSheet({ kind, onClose }: { kind: 'in' | 'out'; onClose: () => void 
           <button className="btn ghost" onClick={onClose}>Annuler</button>
           <button className={'btn' + (kind === 'in' ? ' navy' : '')} style={{ fontSize: 16 }} onClick={save}>Enregistrer</button>
         </div>
-      </div>
-    </div>
+    </>
   )
 }
 
 // A4 · Caisse
 export default function Cash() {
   const { state, toggleFixed } = useStore()
-  const [sheet, setSheet] = useState<'in' | 'out' | null>(null)
+  const [sheet, setSheet] = useState<'in' | 'out'>('out')
+  const [open, setOpen] = useState(false)
+  const [formKey, setFormKey] = useState(0)
+  const openSheet = (k: 'in' | 'out') => { setSheet(k); setFormKey(n => n + 1); setOpen(true) }
   const moves = monthMoves(state)
   const allIn = state.moves.filter(m => m.amount > 0).reduce((a, m) => a + m.amount, 0)
   const allOut = state.moves.filter(m => m.amount < 0).reduce((a, m) => a - m.amount, 0)
@@ -72,8 +75,8 @@ export default function Cash() {
           <div className="hero-tile"><span>Sorties du mois</span><span>{fcfaShort(monthOut)}</span></div>
         </div>
         <div className="grid2" style={{ gap: 8 }}>
-          <button className="btn sm" style={{ width: '100%', gap: 6 }} onClick={() => setSheet('out')}><Icon name="minus" size={18} stroke={2.6} />Sortie</button>
-          <button className="btn sm" style={{ width: '100%', gap: 6, background: 'rgba(255,255,255,.12)' }} onClick={() => setSheet('in')}><Icon name="plus" size={18} stroke={2.6} />Entrée</button>
+          <button className="btn sm" style={{ width: '100%', gap: 6 }} onClick={() => openSheet('out')}><Icon name="minus" size={18} stroke={2.6} />Sortie</button>
+          <button className="btn sm" style={{ width: '100%', gap: 6, background: 'rgba(255,255,255,.12)' }} onClick={() => openSheet('in')}><Icon name="plus" size={18} stroke={2.6} />Entrée</button>
         </div>
       </section>
 
@@ -111,7 +114,9 @@ export default function Cash() {
           ))}
         </div>
       ) : <Empty>Aucun mouvement.</Empty>}
-      {sheet && <MoveSheet kind={sheet} onClose={() => setSheet(null)} />}
+      <Sheet open={open} onClose={() => setOpen(false)} label={sheet === 'in' ? 'Nouvelle entrée' : 'Nouvelle sortie'}>
+        <MoveForm key={formKey} kind={sheet} onClose={() => setOpen(false)} />
+      </Sheet>
     </Screen>
   )
 }

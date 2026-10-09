@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { useFeedback } from '../native'
 import { useStore } from '../store'
 import { Avatar, Icon, Screen } from '../ui'
 
@@ -8,6 +9,7 @@ const ROLE_LABEL = { collab: ['Collaborateur', 'Collaboratrice'], manager: ['Man
 export default function Profile() {
   const { me, logout, reset } = useStore()
   const nav = useNavigate()
+  const { confirm, toast } = useFeedback()
   const p = me!
   const rows: [string, string, boolean?][] = [
     ['Poste', p.poste], ['Équipe', p.team], ['Statut', p.statut], ["Arrivée à l'agence", p.since],
@@ -32,8 +34,8 @@ export default function Profile() {
         ))}
       </div>
       <span className="note" style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span style={{ color: 'var(--muted)' }}><Icon name="lock" size={14} /></span>Modifiable uniquement par l'administration</span>
-      <button className="link" style={{ fontSize: 14, color: 'var(--ink-3)' }} onClick={() => { if (confirm('Remettre les données de démonstration à zéro ?')) reset() }}>Réinitialiser la démo</button>
-      <button onClick={() => { logout(); nav('/', { replace: true }) }} style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger-ink)', background: 'none', border: 'none', padding: 6 }}>Se déconnecter</button>
+      <button className="link" style={{ fontSize: 14, color: 'var(--ink-3)' }} onClick={async () => { if (await confirm({ title: 'Réinitialiser la démo ?', message: 'Pointages, demandes et annonces reviennent aux données de départ.', confirm: 'Réinitialiser', destructive: true })) { reset(); toast('Données de démo réinitialisées', 'info') } }}>Réinitialiser la démo</button>
+      <button onClick={async () => { if (await confirm({ confirm: 'Se déconnecter', destructive: true })) { logout(); nav('/', { replace: true }) } }} style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger-ink)', background: 'none', border: 'none', padding: 6 }}>Se déconnecter</button>
     </Screen>
   )
 }

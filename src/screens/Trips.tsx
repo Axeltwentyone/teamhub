@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { type PayMode, type Transport, type Trip, TEAM_CAP } from '../data'
 import { dayMonth, dayShort, fcfa, isoDay, monthYear, parseAmount, relDay } from '../format'
+import { haptic, useFeedback } from '../native'
+import { usePage } from '../stack'
 import { tripTotal, useForm, useStore } from '../store'
-import { BackHeader, Chips, CTA, Empty, Field, Icon, PageHeader, Pill, Screen, Stat, Toggle } from '../ui'
+import { AddButton, BackHeader, Chips, CTA, Empty, Field, Icon, PageHeader, Pill, Screen, Stat, Toggle } from '../ui'
 
 const TRANSPORTS: Transport[] = ['Taxi', 'Woro', 'VTC', 'Autre']
 const PAY_MODES: PayMode[] = ['Espèces', 'Mobile Money']
@@ -29,7 +30,8 @@ function toThumb(file: File, max = 480): Promise<string> {
 // C7 · Déclarer un déplacement
 export function TripForm() {
   const { me, declareTrip } = useStore()
-  const nav = useNavigate()
+  const { back } = usePage()
+  const { toast } = useFeedback()
   const file = useRef<HTMLInputElement>(null)
   const [f, set] = useForm({
     date: isoDay(), client: '', place: '', reason: '', route: '', transport: 'Taxi' as Transport,
@@ -53,17 +55,19 @@ export function TripForm() {
 
   const send = () => {
     setTried(true)
-    if (over || missing || sent) return
+    if (over || missing) return haptic('error')
+    if (sent) return
     declareTrip({
       date: f.date, client: f.client.trim(), place: f.place.trim(), reason: f.reason.trim(),
       route: f.route.trim() || 'Agence → ' + (f.place.trim() || f.client.trim()),
       transport: f.transport, roundTrip: f.roundTrip, aller, retour, payMode: f.payMode, receipts: f.receipts,
     })
     setSent(true)
-    setTimeout(() => nav('/deplacements', { replace: true }), 700)
+    toast("Déplacement envoyé à l'administration")
+    back()
   }
 
-  const label = sent ? 'Déplacement envoyé ✓' : over ? 'Montant au-dessus du plafond' : "Envoyer à l'administration"
+  const label = over ? 'Montant au-dessus du plafond' : "Envoyer à l'administration"
 
   return (
     <Screen cta>
@@ -126,7 +130,7 @@ export function TripForm() {
         </span>}
       </div>
 
-      <CTA><button className={'btn' + (sent ? ' navy' : '')} disabled={over} onClick={send}>{label}</button></CTA>
+      <CTA><button className="btn" disabled={over} onClick={send}>{label}</button></CTA>
     </Screen>
   )
 }
@@ -164,7 +168,7 @@ export function MyTrips() {
   return (
     <Screen>
       <PageHeader sub={monthYear()} title="Mes déplacements"
-        right={<Link to="/deplacements/nouveau" className="bell" aria-label="Déclarer un déplacement" style={{ background: 'var(--teal)', color: '#fff' }}><Icon name="plus" /></Link>} />
+        right={<AddButton to="/deplacements/nouveau" label="Déclarer un déplacement" />} />
       <div className="grid2" style={{ gap: 8 }}>
         <Stat label="Total du mois" value={fcfa(monthTotal)} />
         <Stat label="À rembourser" value={fcfa(toRefund)} />

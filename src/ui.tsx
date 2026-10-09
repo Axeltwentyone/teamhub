@@ -1,6 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import type { Role } from './data'
+import { haptic } from './native'
+import { usePage } from './stack'
 import { useStore, unreadCount } from './store'
 
 // ——— Icônes (tracés repris de la maquette) ———
@@ -65,11 +67,42 @@ export function Avatar({ ini, color, size = 36 }: { ini: string; color: string; 
   return <span className="avatar" style={{ width: size, height: size, background: color, fontSize: Math.round(size / 3) }}>{ini}</span>
 }
 
+const TitleCtx = createContext<(t: string) => void>(() => {})
+
+/**
+ * Un écran = son propre conteneur de défilement (comme une vue native).
+ * Au scroll, une barre de titre compacte floutée apparaît en haut.
+ */
 export function Screen({ children, dark, cta }: { children: ReactNode; dark?: boolean; cta?: boolean }) {
-  return <main className={'screen' + (dark ? ' dark' : '') + (cta ? ' has-cta' : '')}>{children}</main>
+  const { active, kind } = usePage()
+  const ref = useRef<HTMLElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  const [title, setTitle] = useState('')
+
+  // Toucher l'onglet actif : retour en haut, comme sur iOS / Android.
+  useEffect(() => {
+    if (!active) return
+    const top = () => ref.current?.scrollTo({ top: 0, behavior: 'smooth' })
+    window.addEventListener('th:tab-reselect', top)
+    return () => window.removeEventListener('th:tab-reselect', top)
+  }, [active])
+
+  return (
+    <TitleCtx.Provider value={setTitle}>
+      <div className={'screen-wrap' + (dark ? ' dark' : '') + (scrolled ? ' scrolled' : '')}>
+        {title && <div className="navbar" aria-hidden={!scrolled}><span>{title}</span></div>}
+        <main ref={ref} className={'screen' + (cta ? ' has-cta' : '') + (kind === 'root' ? ' with-tabs' : '')}
+          onScroll={e => setScrolled(e.currentTarget.scrollTop > 40)}>
+          {children}
+        </main>
+      </div>
+    </TitleCtx.Provider>
+  )
 }
 
 export function PageHeader({ sub, title, right }: { sub: ReactNode; title: ReactNode; right?: ReactNode }) {
+  const setTitle = useContext(TitleCtx)
+  useLayoutEffect(() => { if (typeof title === 'string') setTitle(title) }, [title, setTitle])
   return (
     <header className="page-head">
       <div className="col" style={{ gap: 2, minWidth: 0 }}>
@@ -81,17 +114,24 @@ export function PageHeader({ sub, title, right }: { sub: ReactNode; title: React
   )
 }
 
-export function BackHeader({ title, right, to }: { title: ReactNode; right?: ReactNode; to?: string }) {
-  const nav = useNavigate()
+/** En-tête d'écran secondaire : chevron retour (écran poussé) ou croix (modale), collant au scroll. */
+export function BackHeader({ title, right }: { title: ReactNode; right?: ReactNode }) {
+  const { back, kind } = usePage()
+  const modal = kind === 'modal'
   return (
     <header className="back-head">
-      <button className="round-btn" aria-label="Retour" onClick={() => (to ? nav(to) : window.history.length > 1 ? nav(-1) : nav('/'))}>
-        <Icon name="back" size={18} stroke={2.4} />
+      <button className="round-btn" aria-label={modal ? 'Fermer' : 'Retour'} onClick={back}>
+        <Icon name={modal ? 'close' : 'back'} size={modal ? 16 : 18} stroke={modal ? 2.6 : 2.4} />
       </button>
       <h1>{title}</h1>
       {right}
     </header>
   )
+}
+
+/** Bouton rond « + » de l'en-tête (ouvre un formulaire en modale). */
+export function AddButton({ to, label }: { to: string; label: string }) {
+  return <Link to={to} className="bell add" aria-label={label}><Icon name="plus" /></Link>
 }
 
 export function BellButton() {
@@ -129,7 +169,7 @@ export function Chips<T extends string>({ options, value, onPick, cols, wrap }: 
   return (
     <div className={wrap ? 'chips wrap' : 'chips'} style={cols ? { gridTemplateColumns: `repeat(${cols}, 1fr)` } : undefined} role="group">
       {options.map(o => (
-        <button key={o} type="button" className={'chip' + (on(o) ? ' on' : '')} aria-pressed={on(o)} onClick={() => onPick(o)}>{o}</button>
+        <button key={o} type="button" className={'chip' + (on(o) ? ' on' : '')} aria-pressed={on(o)} onClick={() => { haptic('light'); onPick(o) }}>{o}</button>
       ))}
     </div>
   )
@@ -137,7 +177,7 @@ export function Chips<T extends string>({ options, value, onPick, cols, wrap }: 
 
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label?: string }) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} className={'toggle' + (on ? ' on' : '')} onClick={() => onChange(!on)}>
+    <button type="button" role="switch" aria-checked={on} aria-label={label} className={'toggle' + (on ? ' on' : '')} onClick={() => { haptic('light'); onChange(!on) }}>
       <span />
     </button>
   )
@@ -154,7 +194,7 @@ export function CTA({ children }: { children: ReactNode }) {
 export function Segmented({ items }: { items: { label: string; to: string }[] }) {
   return (
     <nav className="segmented">
-      {items.map(i => <NavLink key={i.to} to={i.to} end className={({ isActive }) => (isActive ? 'on' : '')}>{i.label}</NavLink>)}
+      {items.map(i => <NavLink key={i.to} to={i.to} end replace onClick={() => haptic('light')} className={({ isActive }) => (isActive ? 'on' : '')}>{i.label}</NavLink>)}
     </nav>
   )
 }
@@ -189,14 +229,30 @@ const TABS: Record<Role, { to: string; label: string; icon: string; end?: boolea
   ],
 }
 
-export function TabBar({ role }: { role: Role }) {
+const isTabActive = (t: { to: string; end?: boolean }, pathname: string) =>
+  t.end ? pathname === t.to : pathname === t.to || pathname.startsWith(t.to + '/')
+
+/** Barre d'onglets : changement sans historique (comme une app), re-toucher l'onglet remonte en haut. */
+export function TabBar({ role, pathname }: { role: Role; pathname: string }) {
+  const nav = useNavigate()
+  const tabs = TABS[role]
+  // L'onglet le plus spécifique gagne (« /conges/calendrier » pour le manager).
+  const activeTab = tabs.filter(t => isTabActive(t, pathname)).sort((a, b) => b.to.length - a.to.length)[0]
   return (
     <nav className="tabbar" aria-label="Navigation principale">
-      {TABS[role].map(t => (
-        <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => 'tab' + (isActive ? ' on' : '')}>
-          {({ isActive }) => <><Icon name={t.icon} stroke={isActive ? 2.2 : 2} />{t.label}</>}
-        </NavLink>
-      ))}
+      {tabs.map(t => {
+        const on = t === activeTab
+        return (
+          <button key={t.to} className={'tab' + (on ? ' on' : '')} aria-current={on ? 'page' : undefined}
+            onClick={() => {
+              haptic('light')
+              if (on) window.dispatchEvent(new Event('th:tab-reselect'))
+              else nav(t.to, { replace: true })
+            }}>
+            <Icon name={t.icon} stroke={on ? 2.2 : 2} />{t.label}
+          </button>
+        )
+      })}
     </nav>
   )
 }

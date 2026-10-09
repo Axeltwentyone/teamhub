@@ -1,16 +1,18 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { type LeaveType, PEOPLE, person } from '../data'
 import { dayMonth, isoDay, range, workDays } from '../format'
+import { haptic, useFeedback } from '../native'
+import { usePage } from '../stack'
 import { useForm, useStore } from '../store'
-import { Avatar, BackHeader, Chips, CTA, Empty, Field, Icon, PageHeader, Pill, Screen, Segmented, SectionTitle } from '../ui'
+import { AddButton, Avatar, BackHeader, Chips, CTA, Empty, Field, Icon, PageHeader, Pill, Screen, Segmented, SectionTitle } from '../ui'
 
 const LEAVE_TYPES: LeaveType[] = ['Congé annuel', 'Permission', 'Maladie', 'Autre']
 
 // C4 · Demander un congé
 export function LeaveRequest() {
   const { me, requestLeave } = useStore()
-  const nav = useNavigate()
+  const { back } = usePage()
+  const { toast } = useFeedback()
   const [f, set] = useForm({ type: 'Congé annuel' as LeaveType, from: '', to: '', motif: '' })
   const [tried, setTried] = useState(false)
   const [sent, setSent] = useState(false)
@@ -22,10 +24,12 @@ export function LeaveRequest() {
 
   const send = () => {
     setTried(true)
-    if (err || sent) return
+    if (err) return haptic('error')
+    if (sent) return
     requestLeave({ type: f.type, from: f.from, to: f.to, motif: f.motif.trim() || undefined })
     setSent(true)
-    setTimeout(() => nav('/conges', { replace: true }), 700)
+    toast('Demande de congé envoyée')
+    back()
   }
 
   return (
@@ -54,7 +58,7 @@ export function LeaveRequest() {
       <div className="banner info">
         La demande part à l'administration. Vous serez notifié{me!.fem ? 'e' : ''} de la décision et pourrez l'annuler tant qu'elle est en attente.
       </div>
-      <CTA><button className="btn" onClick={send}>{sent ? 'Demande envoyée ✓' : 'Envoyer la demande'}</button></CTA>
+      <CTA><button className="btn" onClick={send}>Envoyer la demande</button></CTA>
     </Screen>
   )
 }
@@ -66,11 +70,17 @@ function LeavesTabs() {
 // C5 · Mes congés
 export function MyLeaves() {
   const { state, me, cancelLeave } = useStore()
+  const { confirm, toast } = useFeedback()
+  const cancel = async (id: string) => {
+    if (await confirm({ title: 'Annuler cette demande ?', message: "L'administration ne la traitera pas.", confirm: 'Annuler la demande', destructive: true, cancel: 'Garder' })) {
+      cancelLeave(id); toast('Demande annulée', 'info')
+    }
+  }
   const mine = state.leaves.filter(l => l.userId === me!.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.from.localeCompare(a.from))
   return (
     <Screen>
       <PageHeader sub="Congés" title="Mes demandes"
-        right={<Link to="/conges/nouveau" className="bell" aria-label="Nouvelle demande" style={{ background: 'var(--teal)', color: '#fff' }}><Icon name="plus" /></Link>} />
+        right={<AddButton to="/conges/nouveau" label="Nouvelle demande" />} />
       <LeavesTabs />
       <div className="col" style={{ gap: 10 }}>
         {mine.length === 0 && <Empty>Aucune demande pour le moment.</Empty>}
@@ -85,7 +95,7 @@ export function MyLeaves() {
             </div>
             {l.comment && <span style={{ fontSize: 13, color: 'var(--ink-2)', background: 'var(--bg)', borderRadius: 10, padding: '8px 10px' }}>{l.comment}</span>}
             {l.status === 'En attente' && (
-              <button onClick={() => cancelLeave(l.id)} style={{ alignSelf: 'flex-start', height: 36, padding: '0 14px', borderRadius: 12, border: '2px solid var(--chip)', background: '#fff', fontSize: 13, fontWeight: 800 }}>
+              <button onClick={() => cancel(l.id)} style={{ alignSelf: 'flex-start', height: 36, padding: '0 14px', borderRadius: 12, border: '2px solid var(--chip)', background: '#fff', fontSize: 13, fontWeight: 800 }}>
                 Annuler la demande
               </button>
             )}

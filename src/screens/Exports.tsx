@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import { PEOPLE, person, QR_PAYLOAD } from '../data'
 import { hm, isoDay } from '../format'
 import { monthMoves, presenceOf, tripTotal, useStore } from '../store'
+import { useFeedback } from '../native'
 import { Icon, PageHeader, Screen, SectionTitle } from '../ui'
 
 function downloadCsv(name: string, rows: (string | number)[][]) {
@@ -21,6 +22,7 @@ function downloadCsv(name: string, rows: (string | number)[][]) {
 export default function Exports() {
   const { state, me, logout, reset } = useStore()
   const nav = useNavigate()
+  const { confirm, toast } = useFeedback()
   const [qr, setQr] = useState('')
   useEffect(() => { QRCode.toDataURL(QR_PAYLOAD, { width: 480, margin: 1, color: { dark: '#1F2A44' } }).then(setQr) }, [])
 
@@ -56,7 +58,7 @@ export default function Exports() {
       <PageHeader sub={`${me!.name} · Administration`} title="Exports" />
       <div className="list">
         {exports.map(e => (
-          <button key={e.label} className="item button" onClick={e.run}>
+          <button key={e.label} className="item button" onClick={() => { e.run(); toast(e.label + ' exporté') }}>
             <span className="icon-tile" style={{ background: 'var(--teal-soft)', color: '#0B6B74' }}><Icon name="download" size={18} /></span>
             <div className="grow"><span className="t">{e.label}</span><span className="s">{e.sub} · CSV</span></div>
             <Icon name="next" size={16} style={{ color: 'var(--muted)' }} />
@@ -71,8 +73,8 @@ export default function Exports() {
         {qr && <a href={qr} download="teamhub-qr-entree.png" className="link" style={{ fontSize: 14 }}>Télécharger le QR code</a>}
       </div>
 
-      <button className="link" style={{ fontSize: 14, color: 'var(--ink-3)' }} onClick={() => { if (confirm('Remettre les données de démonstration à zéro ?')) reset() }}>Réinitialiser la démo</button>
-      <button onClick={() => { logout(); nav('/', { replace: true }) }} style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger-ink)', background: 'none', border: 'none', padding: 6 }}>Se déconnecter</button>
+      <button className="link" style={{ fontSize: 14, color: 'var(--ink-3)' }} onClick={async () => { if (await confirm({ title: 'Réinitialiser la démo ?', message: 'Pointages, demandes, caisse et annonces reviennent aux données de départ.', confirm: 'Réinitialiser', destructive: true })) { reset(); toast('Données de démo réinitialisées', 'info') } }}>Réinitialiser la démo</button>
+      <button onClick={async () => { if (await confirm({ confirm: 'Se déconnecter', destructive: true })) { logout(); nav('/', { replace: true }) } }} style={{ fontSize: 15, fontWeight: 800, color: 'var(--danger-ink)', background: 'none', border: 'none', padding: 6 }}>Se déconnecter</button>
     </Screen>
   )
 }
