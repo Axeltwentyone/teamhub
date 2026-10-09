@@ -23,7 +23,7 @@ export function ManagerHome() {
 
   return (
     <Screen>
-      <PageHeader sub={`${me!.name} · ${me!.poste}`} title="Mon équipe" right={<BellButton />} />
+      <PageHeader sub={`${me!.name} · ${me!.poste}`} title="" right={<BellButton />} />
       <div className="card" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20 }}>
         <div className="grow col" style={{ gap: 2, flex: 1, minWidth: 0 }}>
           <span className="small muted" style={{ fontWeight: 600 }}>Mon pointage · {mine.status}</span>
